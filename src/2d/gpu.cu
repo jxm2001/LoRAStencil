@@ -404,18 +404,41 @@ void gpu_box_2d3r(const double *__restrict__ in, double *__restrict__ out, const
     dim3 grid_config(BLOCK_M, BLOCK_N);
     dim3 block_config(32 * WARP_PER_BLOCK);
 
+	cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    kernel2d_box2d3r<<<grid_config, block_config>>>(array_d[0], array_d[1], cols);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float single_run_time = 0;
+    cudaEventElapsedTime(&single_run_time, start, stop);
+    const float target_warmup_time = 5000.0f;
+    int estimated_iterations = 0;
+    if(single_run_time > 0) {
+        estimated_iterations = static_cast<int>(target_warmup_time / single_run_time);
+    }
+    int warmup_iterations = std::max(50, estimated_iterations);
+    printf("Warmup iterations: %d (estimated for ~5s)\n", warmup_iterations);
+    for(int warmup_iter = 0; warmup_iter < warmup_iterations; warmup_iter++){
+        kernel2d_box2d3r<<<grid_config, block_config>>>(array_d[0], array_d[1], cols);
+        cudaDeviceSynchronize();
+    }
+    cudaEventRecord(start);
     // timing
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     int i = 0;
     for (; i < times; i++) {
         kernel2d_box2d3r<<<grid_config, block_config>>>(array_d[i % 2], array_d[(i + 1) % 2], cols);
     }
     CUDA_CHECK(cudaDeviceSynchronize());
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float elapsed_time = 0;
+    cudaEventElapsedTime(&elapsed_time, start, stop);
     std::cout << "LoRAStencil(2D box_2d3r): " << std::endl;
-    std::cout << "Time = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]"
+    std::cout << "Time = " << elapsed_time << "[ms]"
               << std::endl;
-    double secs = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1e6;
+    double secs = elapsed_time / 1000.0;
     printf("GStencil/s = %f\n", ((double) input_m * input_n * times) / secs / 1e9);
 
     CUDA_CHECK(cudaMemcpy(out, array_d[i % 2], array_size, cudaMemcpyDeviceToHost));
@@ -463,19 +486,45 @@ void gpu_star_2d3r(const double *__restrict__ in, double *__restrict__ out, cons
 
     dim3 block_config(32 * WARP_PER_BLOCK);
 
+	// Warm-up run used solely for performance evaluation; output correctness is not ensured.
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    kernel2d_star2d3r<<<grid_config, block_config>>>(array_d[0], array_d[1], cols);
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float single_run_time = 0;
+    cudaEventElapsedTime(&single_run_time, start, stop);
+    const float target_warmup_time = 5000.0f;
+    int estimated_iterations = 0;
+    if(single_run_time > 0) {
+        estimated_iterations = static_cast<int>(target_warmup_time / single_run_time);
+    }
+    int warmup_iterations = std::max(50, estimated_iterations);
+    printf("Warmup iterations: %d (estimated for ~5s)\n", warmup_iterations);
+    for(int warmup_iter = 0; warmup_iter < warmup_iterations; warmup_iter++){
+        kernel2d_star2d3r<<<grid_config, block_config>>>(array_d[0], array_d[1], cols);
+        cudaDeviceSynchronize();
+    }
     // timing
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    cudaEventRecord(start);
     int i = 0;
     for (; i < times; i++) {
         kernel2d_star2d3r<<<grid_config, block_config>>>(array_d[i % 2], array_d[(i + 1) % 2], cols);
     }
     CUDA_CHECK(cudaDeviceSynchronize());
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    float elapsed_time = 0;
+    cudaEventElapsedTime(&elapsed_time, start, stop);
     std::cout << "LoRAStencil(2D star_2d3r): " << std::endl;
-    std::cout << "Time = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]"
+    std::cout << "Time = " << elapsed_time << "[ms]"
               << std::endl;
-    double secs = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() / 1e6;
+    double secs = elapsed_time / 1000.0;
     printf("GStencil/s = %f\n", ((double) input_m * input_n * times) / secs / 1e9);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     CUDA_CHECK(cudaMemcpy(out, array_d[i % 2], array_size, cudaMemcpyDeviceToHost));
 
 }
