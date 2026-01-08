@@ -204,7 +204,6 @@ void gpu_star_3d1r(const double *__restrict__ in, double *__restrict__ out, cons
                 (kernel_star3d1r<<<grid_config, block_config>>>
                         (array_d[i % 2], array_d[(i + 1) % 2], input_h, rows, cols)));
     }
-    CUDA_CHECK(cudaDeviceSynchronize());
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed_time = 0;
